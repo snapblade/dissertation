@@ -1,55 +1,86 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  FilesetResolver,
-  PoseLandmarker
-} from "@mediapipe/tasks-vision";
-
+import { useEffect, useRef } from "react";
+import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { calculateAngle } from "../pose/math";
 
-type Exercise = "squat" | "pushup" | "plank";
+export type Exercise = "squat" | "pushup" | "plank";
+
+export type CoachStats = {
+  exercise: Exercise;
+  reps: number;
+  angle: number;
+  plankTime: number;
+  feedback: string;
+  inView: boolean;
+};
 
 const VIS_THRESH = 0.6;
 const CONFIRM_FRAMES = 3;
 
-export default function CameraView() {
+const SQUAT_DOWN = 105;
+const SQUAT_UP = 165;
+
+const PUSHUP_DOWN = 95;
+const PUSHUP_UP = 160;
+
+type Props = {
+  exercise: Exercise;
+  running: boolean;
+  voiceEnabled: boolean;
+  onStats: (stats: CoachStats) => void;
+};
+
+export default function CameraView({ exercise, running, voiceEnabled, onStats }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [exercise, setExercise] = useState<Exercise>("squat");
-  const [reps, setReps] = useState(0);
-  const [stage, setStage] = useState<"up" | "down">("up");
-  const [angle, setAngle] = useState(0);
-  const [confirm, setConfirm] = useState(0);
-  const [plankTime, setPlankTime] = useState(0);
+  // refs for realtime tracking
+  const exerciseRef = useRef<Exercise>(exercise);
+  const runningRef = useRef<boolean>(running);
+  const voiceRef = useRef<boolean>(voiceEnabled);
+
+  const repsRef = useRef({ squat: 0, pushup: 0 });
+  const stageRef = useRef({ squat: "up", pushup: "up" });
+  const confirmRef = useRef({ squat: 0, pushup: 0 });
+
+  const plankStartRef = useRef<number | null>(null);
+
+  const lastSpokenRef = useRef("");
+  const lastSpeakTimeRef = useRef(0);
+
+  useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
+  useEffect(() => { runningRef.current = running; }, [running]);
+  useEffect(() => { voiceRef.current = voiceEnabled; }, [voiceEnabled]);
+
+  function speak(text: string) {
+    if (!voiceRef.current) return;
+
+    const now = Date.now();
+    if (text !== lastSpokenRef.current && now - lastSpeakTimeRef.current > 1400) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 1.05;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+      lastSpokenRef.current = text;
+      lastSpeakTimeRef.current = now;
+    }
+  }
+
+  function emit(stats: Partial<CoachStats>) {
+    onStats({
+      exercise: exerciseRef.current,
+      reps: exerciseRef.current === "pushup" ? repsRef.current.pushup : repsRef.current.squat,
+      angle: 0,
+      plankTime: 0,
+      feedback: "Ready",
+      inView: true,
+      ...stats
+    });
+  }
 
   useEffect(() => {
     let landmarker: PoseLandmarker;
-    let plankStart = 0;
+    let active = true;
 
-    // =========================
-    // Keyboard switching
-    // =========================
-    function reset(ex: Exercise) {
-      setExercise(ex);
-      setReps(0);
-      setStage("up");
-      setAngle(0);
-      setConfirm(0);
-      setPlankTime(0);
-      plankStart = 0;
-    }
-
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "1") reset("squat");
-      if (e.key === "2") reset("pushup");
-      if (e.key === "3") reset("plank");
-    }
-
-    window.addEventListener("keydown", handleKey);
-
-    // =========================
-    // Setup MediaPipe
-    // =========================
     async function setup() {
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
@@ -58,13 +89,12 @@ export default function CameraView() {
       landmarker = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
           modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
         },
-        runningMode: "VIDEO",
+        runningMode: "VIDEO"
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
@@ -73,118 +103,168 @@ export default function CameraView() {
       requestAnimationFrame(loop);
     }
 
-    // =========================
-    // Drawing helpers
-    // =========================
-    function drawPoint(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const drawPoint = (ctx: CanvasRenderingContext2D, x: number, y: number) => {
       ctx.beginPath();
-      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.fill();
+    };
+
+    function visibility(lm: any[], ...ids: number[]) {
+      return ids.reduce((s, i) => s + lm[i].visibility, 0) / ids.length;
     }
 
-    function avgVisibility(points: any[]) {
-      return points.reduce((s, p) => s + p.visibility, 0) / points.length;
-    }
+    function loop() {
+      if (!active || !videoRef.current || !canvasRef.current) return;
 
-    function confirmStage(target: "up" | "down") {
-      if (target !== stage) {
-        setConfirm((c) => {
-          if (c + 1 >= CONFIRM_FRAMES) {
-            if (stage === "down" && target === "up") {
-              setReps((r) => r + 1);
-            }
-            setStage(target);
-            return 0;
-          }
-          return c + 1;
-        });
-      } else {
-        setConfirm(0);
+      const ctx = canvasRef.current.getContext("2d")!;
+      const w = 640;
+      const h = 480;
+      ctx.clearRect(0, 0, w, h);
+
+      if (!runningRef.current) {
+        emit({ feedback: "Paused", angle: 0, inView: true, plankTime: 0 });
+        requestAnimationFrame(loop);
+        return;
       }
-    }
 
-    // =========================
-    // Main loop
-    // =========================
-    async function loop() {
-      if (!videoRef.current || !canvasRef.current) return;
+      const res = landmarker.detectForVideo(videoRef.current, performance.now());
 
-      const results = landmarker.detectForVideo(
-        videoRef.current,
-        performance.now()
-      );
+      if (res.landmarks.length === 0) {
+        emit({ inView: false, feedback: "No person detected", angle: 0, plankTime: 0 });
+        requestAnimationFrame(loop);
+        return;
+      }
 
-      const ctx = canvasRef.current.getContext("2d");
-      if (!ctx) return;
+      const lm = res.landmarks[0];
+      ctx.fillStyle = "lime";
+      lm.forEach((p) => drawPoint(ctx, p.x * w, p.y * h));
 
-      const width = 640;
-      const height = 480;
+      const ex = exerciseRef.current;
 
-      ctx.clearRect(0, 0, width, height);
+      // ---------------- SQUAT ----------------
+      if (ex === "squat") {
+        const v = visibility(lm, 23, 25, 27, 24, 26, 28);
+        if (v < VIS_THRESH) {
+          emit({ inView: false, feedback: "Move fully into frame", angle: 0, plankTime: 0 });
+          speak("Move into frame");
+        } else {
+          const left = calculateAngle(lm[23], lm[25], lm[27]);
+          const right = calculateAngle(lm[24], lm[26], lm[28]);
+          const knee = (left + right) / 2;
 
-      if (results.landmarks.length > 0) {
-        const lm = results.landmarks[0];
+          let fb = "Nice squat";
+          if (knee > 140) fb = "Go deeper";
+          else if (knee > 100) fb = "Almost there";
+          else if (knee < 95) fb = "Good depth";
 
-        ctx.fillStyle = "lime";
-        lm.forEach((p) => drawPoint(ctx, p.x * width, p.y * height));
+          speak(fb);
 
-        // =========================
-        // SQUAT
-        // =========================
-        if (exercise === "squat") {
-          const pts = [lm[23], lm[25], lm[27], lm[24], lm[26], lm[28]];
+          let target: "up" | "down" | null = null;
+          if (knee < SQUAT_DOWN) target = "down";
+          if (knee > SQUAT_UP) target = "up";
 
-          if (avgVisibility(pts) > VIS_THRESH) {
-            const left = calculateAngle(lm[23], lm[25], lm[27]);
-            const right = calculateAngle(lm[24], lm[26], lm[28]);
-            const kneeAngle = (left + right) / 2;
-
-            setAngle(kneeAngle);
-
-            if (kneeAngle < 105) confirmStage("down");
-            if (kneeAngle > 165) confirmStage("up");
-          }
-        }
-
-        // =========================
-        // PUSHUP
-        // =========================
-        if (exercise === "pushup") {
-          const pts = [lm[11], lm[13], lm[15], lm[12], lm[14], lm[16]];
-
-          if (avgVisibility(pts) > VIS_THRESH) {
-            const left = calculateAngle(lm[11], lm[13], lm[15]);
-            const right = calculateAngle(lm[12], lm[14], lm[16]);
-            const elbowAngle = (left + right) / 2;
-
-            setAngle(elbowAngle);
-
-            if (elbowAngle < 95) confirmStage("down");
-            if (elbowAngle > 160) confirmStage("up");
-          }
-        }
-
-        // =========================
-        // PLANK
-        // =========================
-        if (exercise === "plank") {
-          const pts = [lm[11], lm[23], lm[27], lm[12], lm[24], lm[28]];
-
-          if (avgVisibility(pts) > VIS_THRESH) {
-            const left = calculateAngle(lm[11], lm[23], lm[27]);
-            const right = calculateAngle(lm[12], lm[24], lm[28]);
-            const bodyAngle = (left + right) / 2;
-
-            setAngle(bodyAngle);
-
-            if (bodyAngle > 165) {
-              if (!plankStart) plankStart = performance.now();
-              setPlankTime((performance.now() - plankStart) / 1000);
-            } else {
-              plankStart = 0;
-              setPlankTime(0);
+          if (target && target !== stageRef.current.squat) {
+            confirmRef.current.squat++;
+            if (confirmRef.current.squat >= CONFIRM_FRAMES) {
+              if (stageRef.current.squat === "down" && target === "up") {
+                repsRef.current.squat++;
+              }
+              stageRef.current.squat = target;
+              confirmRef.current.squat = 0;
             }
+          } else confirmRef.current.squat = 0;
+
+          emit({
+            inView: true,
+            feedback: fb,
+            angle: knee,
+            reps: repsRef.current.squat,
+            plankTime: 0
+          });
+        }
+      }
+
+      // ---------------- PUSHUP ----------------
+      if (ex === "pushup") {
+        const v = visibility(lm, 11, 13, 15, 12, 14, 16);
+        if (v < VIS_THRESH) {
+          emit({ inView: false, feedback: "Move into view", angle: 0, plankTime: 0 });
+          speak("Move into view");
+        } else {
+          const left = calculateAngle(lm[11], lm[13], lm[15]);
+          const right = calculateAngle(lm[12], lm[14], lm[16]);
+          const elbow = (left + right) / 2;
+
+          let fb = "Good push-up";
+          if (elbow > 120) fb = "Go lower";
+          else if (elbow > 90) fb = "Almost there";
+          else if (elbow < 85) fb = "Nice depth";
+
+          speak(fb);
+
+          let target: "up" | "down" | null = null;
+          if (elbow < PUSHUP_DOWN) target = "down";
+          if (elbow > PUSHUP_UP) target = "up";
+
+          if (target && target !== stageRef.current.pushup) {
+            confirmRef.current.pushup++;
+            if (confirmRef.current.pushup >= CONFIRM_FRAMES) {
+              if (stageRef.current.pushup === "down" && target === "up") {
+                repsRef.current.pushup++;
+              }
+              stageRef.current.pushup = target;
+              confirmRef.current.pushup = 0;
+            }
+          } else confirmRef.current.pushup = 0;
+
+          emit({
+            inView: true,
+            feedback: fb,
+            angle: elbow,
+            reps: repsRef.current.pushup,
+            plankTime: 0
+          });
+        }
+      }
+
+      // ---------------- PLANK ----------------
+      if (ex === "plank") {
+        const v = visibility(lm, 11, 23, 27, 12, 24, 28);
+        if (v < VIS_THRESH) {
+          plankStartRef.current = null;
+          emit({ inView: false, feedback: "Move into view", angle: 0, plankTime: 0 });
+          speak("Move into view");
+        } else {
+          const left = calculateAngle(lm[11], lm[23], lm[27]);
+          const right = calculateAngle(lm[12], lm[24], lm[28]);
+          const body = (left + right) / 2;
+
+          let fb = "Fix your form";
+          let hold = 0;
+
+          if (body > 165) {
+            fb = "Solid plank";
+            if (!plankStartRef.current) plankStartRef.current = performance.now();
+            hold = (performance.now() - plankStartRef.current) / 1000;
+          } else if (body > 150) {
+            fb = "Adjust hips slightly";
+            plankStartRef.current = null;
+            hold = 0;
+          } else {
+            fb = "Fix your form";
+            plankStartRef.current = null;
+            hold = 0;
           }
+
+          speak(fb);
+
+          emit({
+            inView: true,
+            feedback: fb,
+            angle: body,
+            reps: 0,
+            plankTime: hold
+          });
         }
       }
 
@@ -193,44 +273,41 @@ export default function CameraView() {
 
     setup();
 
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [exercise, stage]);
+    return () => {
+      active = false;
+    };
+  }, [onStats]);
 
-  // =========================
-  // UI
-  // =========================
   return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ position: "relative", width: 640, height: 480, margin: "0 auto" }}>
-        <video
-          ref={videoRef}
-          width={640}
-          height={480}
-          autoPlay
-          playsInline
-          style={{ position: "absolute", top: 0, left: 0 }}
-        />
-
-        <canvas
-          ref={canvasRef}
-          width={640}
-          height={480}
-          style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }}
-        />
-      </div>
-
-      <h2>Exercise: {exercise.toUpperCase()} (1/2/3)</h2>
-
-      {exercise === "plank" ? (
-        <h2>Hold: {plankTime.toFixed(1)}s</h2>
-      ) : (
-        <>
-          <h2>Reps: {reps}</h2>
-          <p>Stage: {stage}</p>
-        </>
-      )}
-
-      <p>Angle: {angle.toFixed(0)}°</p>
+   <div style={{
+  position: "relative",
+  width: "100%",
+  aspectRatio: "4 / 3",
+  maxHeight: "70vh"
+}}>
+     <video
+  ref={videoRef}
+  autoPlay
+  playsInline
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    borderRadius: 16
+  }}
+/>
+      <canvas
+  ref={canvasRef}
+  style={{
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    pointerEvents: "none",
+    borderRadius: 16
+  }}
+/>
     </div>
   );
 }
