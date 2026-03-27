@@ -21,7 +21,10 @@ export type CoachStats = {
 };
 
 const CONFIRM_FRAMES = 3;
-const DETECT_THRESHOLD = 30;
+const REPS_PER_SET = 5;
+const TOTAL_SETS = 3;
+const REST_DURATION = 5;
+const DETECT_THRESHOLD = 25;
 const ISSUE_THRESHOLD = 20;
 
 type Props = {
@@ -50,16 +53,20 @@ export default function CameraView({
 
   const plankStartRef = useRef<number | null>(null);
 
-  const repScoresRef = useRef<number[]>([]);
   const formScoreRef = useRef<number>(100);
-
   const issuesRef = useRef<string[]>([]);
   const primaryIssueRef = useRef<string | null>(null);
   const issueConfidenceRef = useRef<number>(0);
   const lastSpokenIssueRef = useRef<string | null>(null);
 
+  const restingRef = useRef<boolean>(false);
+  const restTimeRef = useRef<number>(0);
+  const restIntervalRef = useRef<number | null>(null);
+
   const detectedRef = useRef<Exercise | null>(null);
   const confidenceRef = useRef<number>(0);
+
+  const workoutStartRef = useRef<number>(performance.now());
 
   useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
   useEffect(() => { voiceRef.current = voiceEnabled; }, [voiceEnabled]);
@@ -75,13 +82,55 @@ export default function CameraView({
     setsRef.current = { squat: 1, pushup: 1 };
     stageRef.current = { squat: "up", pushup: "up" };
     confirmRef.current = { squat: 0, pushup: 0 };
-    repScoresRef.current = [];
+    plankStartRef.current = null;
     formScoreRef.current = 100;
     issuesRef.current = [];
     primaryIssueRef.current = null;
     issueConfidenceRef.current = 0;
     lastSpokenIssueRef.current = null;
-    plankStartRef.current = null;
+    restingRef.current = false;
+    restTimeRef.current = 0;
+    workoutStartRef.current = performance.now();
+  }
+
+  function saveWorkout(ex: Exercise, duration: number) {
+
+    const newWorkout = {
+      id: crypto.randomUUID(),
+      exercise: ex,
+      totalSets: TOTAL_SETS,
+      repsPerSet: REPS_PER_SET,
+      duration,
+      date: new Date().toISOString()
+    };
+
+    const existing = JSON.parse(localStorage.getItem("workouts") || "[]");
+    existing.push(newWorkout);
+    localStorage.setItem("workouts", JSON.stringify(existing));
+  }
+
+  function startRest(ex: "squat" | "pushup") {
+
+    restingRef.current = true;
+    restTimeRef.current = REST_DURATION;
+
+    restIntervalRef.current = window.setInterval(() => {
+
+      restTimeRef.current--;
+
+      if (restTimeRef.current <= 0) {
+
+        if (restIntervalRef.current) {
+          clearInterval(restIntervalRef.current);
+          restIntervalRef.current = null;
+        }
+
+        restingRef.current = false;
+        restTimeRef.current = 0;
+        speak("Start");
+      }
+
+    }, 1000);
   }
 
   function computeDifficulty(
@@ -89,15 +138,9 @@ export default function CameraView({
     issueCount: number
   ): "easy" | "moderate" | "hard" | "advanced" {
 
-    if (formScore > 90 && issueCount === 0)
-      return "easy";
-
-    if (formScore > 75 && issueCount <= 1)
-      return "moderate";
-
-    if (formScore > 60)
-      return "hard";
-
+    if (formScore > 90 && issueCount === 0) return "easy";
+    if (formScore > 75) return "moderate";
+    if (formScore > 60) return "hard";
     return "advanced";
   }
 
@@ -119,14 +162,9 @@ export default function CameraView({
       (calculateAngle(lm[11], lm[23], lm[27]) +
        calculateAngle(lm[12], lm[24], lm[28])) / 2;
 
-    if (torsoVertical && knee < 150)
-      return "squat";
-
-    if (!torsoVertical && elbow < 150)
-      return "pushup";
-
-    if (!torsoVertical && elbow > 160 && body > 160)
-      return "plank";
+    if (torsoVertical && knee < 150) return "squat";
+    if (!torsoVertical && elbow < 150) return "pushup";
+    if (!torsoVertical && elbow > 160 && body > 160) return "plank";
 
     return null;
   }
@@ -142,17 +180,8 @@ export default function CameraView({
     const issues: string[] = [];
 
     if (ex === "squat") {
-      if (Math.abs(left - right) > 15)
-        issues.push("Balance your weight");
-
-      if (angle > 140)
-        issues.push("Go lower");
-
-      const torso =
-        calculateAngle(lm[11], lm[23], { x: lm[23].x, y: lm[23].y - 0.2 });
-
-      if (torso < 70)
-        issues.push("Keep chest up");
+      if (Math.abs(left - right) > 15) issues.push("Balance your weight");
+      if (angle > 140) issues.push("Go lower");
     }
 
     if (ex === "pushup") {
@@ -160,14 +189,7 @@ export default function CameraView({
         (calculateAngle(lm[11], lm[23], lm[27]) +
          calculateAngle(lm[12], lm[24], lm[28])) / 2;
 
-      if (body < 155)
-        issues.push("Lower hips");
-
-      if (body > 178)
-        issues.push("Don't raise hips");
-
-      if (Math.abs(left - right) > 20)
-        issues.push("Keep arms even");
+      if (body < 160) issues.push("Lower hips");
     }
 
     if (ex === "plank") {
@@ -175,11 +197,7 @@ export default function CameraView({
         (calculateAngle(lm[11], lm[23], lm[27]) +
          calculateAngle(lm[12], lm[24], lm[28])) / 2;
 
-      if (body < 160)
-        issues.push("Engage core");
-
-      if (body > 178)
-        issues.push("Lower hips slightly");
+      if (body < 165) issues.push("Engage core");
     }
 
     return issues;
@@ -200,8 +218,8 @@ export default function CameraView({
       plankTime: 0,
       feedback: primaryIssueRef.current ?? "Good form",
       inView: true,
-      resting: false,
-      restTime: 0,
+      resting: restingRef.current,
+      restTime: restTimeRef.current,
       formScore: formScoreRef.current,
       formIssues: issuesRef.current,
       primaryIssue: primaryIssueRef.current,
@@ -240,7 +258,7 @@ export default function CameraView({
 
     function loop() {
 
-      if (!active || !videoRef.current) return;
+      if (!active || !videoRef.current || !running) return;
 
       const res = landmarker.detectForVideo(videoRef.current, performance.now());
       if (!res.landmarks.length) {
@@ -251,10 +269,15 @@ export default function CameraView({
 
       const lm = res.landmarks[0];
 
+      if (restingRef.current) {
+        emit({ feedback: `Resting ${restTimeRef.current}s` });
+        requestAnimationFrame(loop);
+        return;
+      }
+
       const candidate = detectExercise(lm);
 
       if (candidate) {
-
         if (detectedRef.current === candidate)
           confidenceRef.current++;
         else {
@@ -263,13 +286,11 @@ export default function CameraView({
         }
 
         if (confidenceRef.current > DETECT_THRESHOLD) {
-
           if (exerciseRef.current !== candidate) {
             speak(`Detected ${candidate}`);
             resetWorkoutState();
             exerciseRef.current = candidate;
           }
-
           confidenceRef.current = 0;
         }
       }
@@ -309,9 +330,7 @@ export default function CameraView({
         issuesRef.current = detectedIssues;
 
         if (detectedIssues.length > 0) {
-
           const top = detectedIssues[0];
-
           if (primaryIssueRef.current === top)
             issueConfidenceRef.current++;
           else {
@@ -326,14 +345,12 @@ export default function CameraView({
             speak(top);
             lastSpokenIssueRef.current = top;
           }
-
         } else {
           primaryIssueRef.current = null;
           issueConfidenceRef.current = 0;
         }
 
         let target: "up" | "down" | null = null;
-
         if (angle < 110) target = "down";
         if (angle > 160) target = "up";
 
@@ -344,9 +361,35 @@ export default function CameraView({
           if (confirmRef.current[ex] >= CONFIRM_FRAMES) {
 
             if (stageRef.current[ex] === "down" && target === "up") {
+
               repsRef.current[ex]++;
+
               if (!primaryIssueRef.current)
                 speak(String(repsRef.current[ex]));
+
+              if (repsRef.current[ex] >= REPS_PER_SET) {
+
+                if (setsRef.current[ex] < TOTAL_SETS) {
+
+                  speak("Set complete");
+
+                  setsRef.current[ex]++;
+                  repsRef.current[ex] = 0;
+
+                  startRest(ex);
+
+                } else {
+
+                  speak("Workout complete");
+
+                  const duration =
+                    Math.floor((performance.now() - workoutStartRef.current) / 1000);
+
+                  saveWorkout(ex, duration);
+
+                  resetWorkoutState();
+                }
+              }
             }
 
             stageRef.current[ex] = target;
@@ -363,7 +406,7 @@ export default function CameraView({
     setup();
     return () => { active = false; };
 
-  }, [onStats]);
+  }, [onStats, running]);
 
   return (
     <video

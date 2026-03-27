@@ -11,7 +11,9 @@ export default function StatsPanel({
   exercise,
   inView,
   formScore,
-  difficulty
+  difficulty,
+  resting,
+  restTime
 }: Props) {
 
   const isPlank = exercise === "plank";
@@ -37,10 +39,12 @@ export default function StatsPanel({
       }}
     >
       <h2>
-        {isPlank
-          ? `Hold: ${plankTime.toFixed(1)}s`
-          : `Set ${sets} • Reps: ${reps}`}
-      </h2>
+  {resting
+    ? `Rest: ${restTime}s`
+    : isPlank
+    ? `Hold: ${plankTime.toFixed(1)}s`
+    : `Set ${sets} • Reps: ${reps}`}
+</h2>
 
       <p>Angle: {angle.toFixed(0)}°</p>
 
