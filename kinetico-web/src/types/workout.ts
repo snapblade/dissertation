@@ -1,6 +1,8 @@
+export type Exercise = "squat" | "pushup" | "plank";
+
 export type Workout = {
   id: string;
-  exercise: "squat" | "pushup" | "plank";
+  exercise: Exercise;
   totalSets: number;
   repsPerSet: number;
   date: string;

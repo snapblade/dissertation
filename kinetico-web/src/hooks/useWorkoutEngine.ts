@@ -1,252 +1,345 @@
-import { useEffect, useRef, useState } from "react";
-import type { Exercise } from "../components/CameraView";
-import type { Workout } from "../types/workout";
+import { useEffect, useRef, useState, useCallback } from "react";
+import type { Exercise, Workout } from "../types/workout";
+import type { Difficulty } from "./useExerciseAnalyzer";
 
-/* ===============================
-   BASE CONFIG
-================================ */
+/* ───────────────────────────────────────
+   DIFFICULTY PROFILES
+─────────────────────────────────────── */
 
-const BASE_REPS = 5;
-const BASE_SETS = 3;
-const BASE_REST = 5;
-const BASE_PLANK = 10;
+type Profile = {
+  repsPerSet: number;
+  totalSets: number;
+  restSeconds: number;
+  plankSeconds: number;
+  repDepth: number;
+};
 
-/* ===============================
-   TYPES
-================================ */
+const PROFILES: Record<Difficulty, Profile> = {
+  easy:     { repsPerSet: 4,  totalSets: 3, restSeconds: 8, plankSeconds: 8,  repDepth: 130 },
+  moderate: { repsPerSet: 6,  totalSets: 3, restSeconds: 5, plankSeconds: 12, repDepth: 120 },
+  hard:     { repsPerSet: 8,  totalSets: 3, restSeconds: 3, plankSeconds: 16, repDepth: 110 },
+};
+
+/* ───────────────────────────────────────
+   ADAPTIVE THRESHOLDS
+─────────────────────────────────────── */
+
+const PROMOTE_SCORE = 85;
+const DEMOTE_SCORE = 60;
+
+/* ───────────────────────────────────────
+   STATE TYPES
+─────────────────────────────────────── */
 
 export type WorkoutState =
   | "idle"
-  | "active_set"
+  | "active"
   | "resting"
   | "completed";
 
-export type Difficulty =
-  | "easy"
-  | "moderate"
-  | "hard"
-  | "advanced";
-
 export type WorkoutSummary = {
   exercise: Exercise;
+  difficulty: Difficulty;
   totalSets: number;
-  finalRepsPerSet: number;
+  repsPerSet: number;
   totalReps: number;
   duration: number;
-  averageFormScore: number;
+  avgFormScore: number;
 };
 
+const CONFIRM_FRAMES = 3;
+
+/* ───────────────────────────────────────
+   HOOK
+─────────────────────────────────────── */
+
 export function useWorkoutEngine(exercise: Exercise) {
-
-  const [state, setState] = useState<WorkoutState>("idle");
-  const [difficulty, setDifficulty] = useState<Difficulty>("moderate");
-
+  /* ─── render state (drives UI) ─── */
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
-
-  const [targetReps, setTargetReps] = useState(BASE_REPS);
-  const [restTime, setRestTime] = useState(BASE_REST);
-  const [restDuration, setRestDuration] = useState(BASE_REST);
-
+  const [restTime, setRestTime] = useState(0);
   const [plankTime, setPlankTime] = useState(0);
-  const [plankDuration, setPlankDuration] = useState(BASE_PLANK);
-
+  const [feedback, setFeedback] = useState("Ready");
+  const [difficulty, setDifficulty] = useState<Difficulty>("moderate");
+  const [state, setState] = useState<WorkoutState>("idle");
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
 
+  /* ─── refs mirror state for use inside processFrame ─── */
+  const repsRef = useRef(0);
+  const setsRef = useRef(1);
+  const stateRef = useRef<WorkoutState>("idle");
+  const difficultyRef = useRef<Difficulty>("moderate");
+  const exerciseRef = useRef<Exercise>(exercise);
+
+  const stageRef = useRef<"up" | "down">("up");
+  const confirmRef = useRef(0);
+  const minAngleRef = useRef(180);
+  const plankStartRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const restIntervalRef = useRef<number | null>(null);
-  const plankIntervalRef = useRef<number | null>(null);
 
   const formScoresRef = useRef<number[]>([]);
   const allFormScoresRef = useRef<number[]>([]);
 
+  /* ─── keep exercise ref in sync ─── */
+  useEffect(() => {
+    exerciseRef.current = exercise;
+  }, [exercise]);
+
+  /* ─── reset when exercise changes ─── */
   useEffect(() => {
     resetWorkout();
   }, [exercise]);
 
+  /* ─── helpers: update ref + state together ─── */
+
+  function setRepsSync(val: number) {
+    repsRef.current = val;
+    setReps(val);
+  }
+
+  function setSetsSync(val: number) {
+    setsRef.current = val;
+    setSets(val);
+  }
+
+  function setStateSync(val: WorkoutState) {
+    stateRef.current = val;
+    setState(val);
+  }
+
+  function setDifficultySync(val: Difficulty) {
+    difficultyRef.current = val;
+    setDifficulty(val);
+  }
+
+  function getProfile(): Profile {
+    return PROFILES[difficultyRef.current];
+  }
+
+  /* ─── start workout ─── */
+
   function startWorkout() {
-    if (state !== "idle") return;
-    setState("active_set");
+    if (stateRef.current !== "idle") return;
+    setStateSync("active");
     startTimeRef.current = Date.now();
   }
 
-  function recordFormScore(score: number) {
-    formScoresRef.current.push(score);
-    allFormScoresRef.current.push(score);
-  }
+  /* ─── process each frame (called from App) ─── */
 
-  function completeRep() {
-    if (state !== "active_set") return;
+  const processFrame = useCallback((
+    angle: number,
+    formScore: number,
+    formIssues: string[]
+  ) => {
+    if (stateRef.current !== "active") return;
 
-    const newReps = reps + 1;
-    setReps(newReps);
+    formScoresRef.current.push(formScore);
+    allFormScoresRef.current.push(formScore);
 
-    if (newReps >= targetReps) {
-      adaptAfterSet();
-      moveToRest();
+    if (formIssues.length > 0) {
+      setFeedback(formIssues[0]);
+    } else {
+      setFeedback("Good form");
     }
-  }
 
-  function startPlankTimer() {
-    if (state !== "active_set") return;
-    if (plankIntervalRef.current) return;
+    if (exerciseRef.current === "plank") {
+      processPlank(angle);
+    } else {
+      processRep(angle);
+    }
+  }, []);
 
-    plankIntervalRef.current = window.setInterval(() => {
-      setPlankTime((t) => {
-        if (t + 1 >= plankDuration) {
-          clearInterval(plankIntervalRef.current!);
-          plankIntervalRef.current = null;
-          adaptAfterSet();
-          moveToRest();
-          return 0;
+  /* ─── rep counting (squat / pushup) ─── */
+
+  function processRep(angle: number) {
+    // always track the lowest point reached
+    if (angle < minAngleRef.current) {
+      minAngleRef.current = angle;
+    }
+
+    // detect position
+    const isUp = angle > 160;
+    const isDescending = angle < 150;
+
+    // user started going down → mark as "down"
+    if (isDescending && stageRef.current === "up") {
+      stageRef.current = "down";
+      confirmRef.current = 0;
+      return;
+    }
+
+    // user came back up → evaluate the attempt
+    if (isUp && stageRef.current === "down") {
+      confirmRef.current++;
+
+      if (confirmRef.current >= CONFIRM_FRAMES) {
+        const depthTarget = getProfile().repDepth;
+
+        if (minAngleRef.current <= depthTarget) {
+          // deep enough → count the rep
+          const newReps = repsRef.current + 1;
+          setRepsSync(newReps);
+
+          if (newReps >= getProfile().repsPerSet) {
+            completeSet();
+          }
+        } else {
+          // attempted but didn't go deep enough
+          setFeedback("Go lower");
         }
-        return t + 1;
-      });
-    }, 1000);
+
+        stageRef.current = "up";
+        confirmRef.current = 0;
+        minAngleRef.current = 180;
+      }
+    }
   }
 
-  /* ===============================
-     ADAPTIVE LOGIC
-  ================================ */
+  /* ─── plank hold ─── */
 
-  function adaptAfterSet() {
-    if (formScoresRef.current.length === 0) return;
+  function processPlank(angle: number) {
+    if (angle > 160) {
+      if (!plankStartRef.current) {
+        plankStartRef.current = performance.now();
+      }
+      const hold = (performance.now() - plankStartRef.current) / 1000;
+      setPlankTime(hold);
 
-    const avg =
-      formScoresRef.current.reduce((a,b)=>a+b,0) /
-      formScoresRef.current.length;
-
-    // High performance
-    if (avg >= 90) {
-      setTargetReps(r => r + 1);
-      setRestDuration(r => Math.max(3, r - 1));
-      setPlankDuration(p => p + 2);
+      if (hold >= getProfile().plankSeconds) {
+        plankStartRef.current = null;
+        setPlankTime(0);
+        completeSet();
+      }
+    } else {
+      plankStartRef.current = null;
+      setPlankTime(0);
     }
+  }
 
-    // Low performance
-    if (avg < 75) {
-      setTargetReps(r => Math.max(3, r - 1));
-      setRestDuration(r => r + 2);
-      setPlankDuration(p => Math.max(6, p - 2));
-    }
+  /* ─── set completion → adapt → rest ─── */
 
-    updateDifficulty();
+  function completeSet() {
+    adaptDifficulty();
     formScoresRef.current = [];
-  }
 
-  function updateDifficulty() {
-    let score = 0;
-
-    if (targetReps >= BASE_REPS + 2) score += 2;
-    else if (targetReps >= BASE_REPS + 1) score += 1;
-
-    if (restDuration <= BASE_REST - 2) score += 2;
-    else if (restDuration <= BASE_REST - 1) score += 1;
-
-    if (plankDuration >= BASE_PLANK + 4) score += 2;
-    else if (plankDuration >= BASE_PLANK + 2) score += 1;
-
-    if (score >= 5) setDifficulty("advanced");
-    else if (score >= 3) setDifficulty("hard");
-    else if (score >= 1) setDifficulty("moderate");
-    else setDifficulty("easy");
-  }
-
-  function moveToRest() {
-    setState("resting");
-    setReps(0);
-    setRestTime(restDuration);
-
-    restIntervalRef.current = window.setInterval(() => {
-      setRestTime(t => {
-        if (t <= 1) {
-          clearInterval(restIntervalRef.current!);
-          restIntervalRef.current = null;
-          nextSet();
-          return restDuration;
-        }
-        return t - 1;
-      });
-    }, 1000);
-  }
-
-  function nextSet() {
-    if (sets >= BASE_SETS) {
+    if (setsRef.current >= getProfile().totalSets) {
       finishWorkout();
       return;
     }
-    setSets(s => s + 1);
-    setState("active_set");
+
+    setStateSync("resting");
+    setRepsSync(0);
+
+    let remaining = getProfile().restSeconds;
+    setRestTime(remaining);
+
+    restIntervalRef.current = window.setInterval(() => {
+      remaining--;
+      setRestTime(remaining);
+
+      if (remaining <= 0) {
+        clearInterval(restIntervalRef.current!);
+        restIntervalRef.current = null;
+        setSetsSync(setsRef.current + 1);
+        setStateSync("active");
+        stageRef.current = "up";
+        confirmRef.current = 0;
+      }
+    }, 1000);
   }
 
-  function finishWorkout() {
-    setState("completed");
+  /* ─── adaptive difficulty ─── */
 
-    const duration =
-      startTimeRef.current
-        ? Math.floor((Date.now() - startTimeRef.current) / 1000)
-        : 0;
+  function adaptDifficulty() {
+    if (formScoresRef.current.length === 0) return;
+
+    const avg =
+      formScoresRef.current.reduce((a, b) => a + b, 0) /
+      formScoresRef.current.length;
+
+    const current = difficultyRef.current;
+
+    if (avg >= PROMOTE_SCORE && current !== "hard") {
+      setDifficultySync(current === "easy" ? "moderate" : "hard");
+    } else if (avg < DEMOTE_SCORE && current !== "easy") {
+      setDifficultySync(current === "hard" ? "moderate" : "easy");
+    }
+  }
+
+  /* ─── workout complete ─── */
+
+  function finishWorkout() {
+    setStateSync("completed");
+
+    const duration = startTimeRef.current
+      ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+      : 0;
 
     const avgForm =
       allFormScoresRef.current.length > 0
-        ? allFormScoresRef.current.reduce((a,b)=>a+b,0) /
-          allFormScoresRef.current.length
+        ? Math.round(
+            allFormScoresRef.current.reduce((a, b) => a + b, 0) /
+              allFormScoresRef.current.length
+          )
         : 0;
+
+    const profile = getProfile();
 
     const workout: Workout = {
       id: crypto.randomUUID(),
-      exercise,
-      totalSets: BASE_SETS,
-      repsPerSet: targetReps,
+      exercise: exerciseRef.current,
+      totalSets: profile.totalSets,
+      repsPerSet: profile.repsPerSet,
       date: new Date().toISOString(),
-      duration
+      duration,
     };
 
-    const existing =
-      JSON.parse(localStorage.getItem("workouts") || "[]");
-
-    localStorage.setItem(
-      "workouts",
-      JSON.stringify([workout, ...existing])
-    );
+    const existing = JSON.parse(localStorage.getItem("workouts") || "[]");
+    localStorage.setItem("workouts", JSON.stringify([workout, ...existing]));
 
     setSummary({
-      exercise,
-      totalSets: BASE_SETS,
-      finalRepsPerSet: targetReps,
-      totalReps: BASE_SETS * targetReps,
+      exercise: exerciseRef.current,
+      difficulty: difficultyRef.current,
+      totalSets: profile.totalSets,
+      repsPerSet: profile.repsPerSet,
+      totalReps: profile.totalSets * profile.repsPerSet,
       duration,
-      averageFormScore: Math.round(avgForm)
+      avgFormScore: avgForm,
     });
   }
 
+  /* ─── reset ─── */
+
   function resetWorkout() {
-    clearInterval(restIntervalRef.current!);
-    clearInterval(plankIntervalRef.current!);
+    if (restIntervalRef.current) {
+      clearInterval(restIntervalRef.current);
+      restIntervalRef.current = null;
+    }
 
-    restIntervalRef.current = null;
-    plankIntervalRef.current = null;
-
-    setState("idle");
-    setReps(0);
-    setSets(1);
-    setTargetReps(BASE_REPS);
-    setRestDuration(BASE_REST);
-    setRestTime(BASE_REST);
-    setPlankDuration(BASE_PLANK);
+    setStateSync("idle");
+    setRepsSync(0);
+    setSetsSync(1);
+    setRestTime(0);
     setPlankTime(0);
     setSummary(null);
-    setDifficulty("moderate");
+    setFeedback("Ready");
+    setDifficultySync("moderate");
 
+    stageRef.current = "up";
+    confirmRef.current = 0;
+    minAngleRef.current = 180;
+    plankStartRef.current = null;
+    startTimeRef.current = null;
     formScoresRef.current = [];
     allFormScoresRef.current = [];
-    startTimeRef.current = null;
   }
+
+  /* ─── cleanup ─── */
 
   useEffect(() => {
     return () => {
-      clearInterval(restIntervalRef.current!);
-      clearInterval(plankIntervalRef.current!);
+      if (restIntervalRef.current) clearInterval(restIntervalRef.current);
     };
   }, []);
 
@@ -257,13 +350,12 @@ export function useWorkoutEngine(exercise: Exercise) {
     sets,
     restTime,
     plankTime,
-    targetReps,
-    plankDuration,
+    feedback,
     summary,
+    profile: PROFILES[difficulty],
     startWorkout,
-    completeRep,
-    startPlankTimer,
-    recordFormScore,
-    resetWorkout
+    processFrame,
+    resetWorkout,
+    setDifficulty: setDifficultySync,
   };
 }

@@ -5,39 +5,39 @@ type Props = {
   onClose: () => void;
 };
 
-export default function WorkoutSummaryModal({
-  summary,
-  onClose
-}: Props) {
-
+export default function WorkoutSummaryModal({ summary, onClose }: Props) {
   return (
     <div style={overlay}>
       <div style={modal}>
-        <h2>Workout Complete 🎉</h2>
+        <h2 style={{ marginTop: 0 }}>Workout Complete</h2>
 
         <div style={statRow}>
           <span>Exercise</span>
-          <strong>{summary.exercise}</strong>
+          <strong>{summary.exercise.toUpperCase()}</strong>
         </div>
-
+        <div style={statRow}>
+          <span>Difficulty</span>
+          <strong>{summary.difficulty.toUpperCase()}</strong>
+        </div>
         <div style={statRow}>
           <span>Sets</span>
           <strong>{summary.totalSets}</strong>
         </div>
-
         <div style={statRow}>
-          <span>Reps per Set</span>
-          <strong>{summary.finalRepsPerSet}</strong>
+          <span>Reps / Set</span>
+          <strong>{summary.repsPerSet}</strong>
         </div>
-
         <div style={statRow}>
           <span>Total Reps</span>
           <strong>{summary.totalReps}</strong>
         </div>
-
         <div style={statRow}>
           <span>Duration</span>
           <strong>{summary.duration}s</strong>
+        </div>
+        <div style={statRow}>
+          <span>Avg Form</span>
+          <strong>{summary.avgFormScore}%</strong>
         </div>
 
         <button style={button} onClick={onClose}>
@@ -48,32 +48,32 @@ export default function WorkoutSummaryModal({
   );
 }
 
-const overlay: any = {
+const overlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,0.7)",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
-  zIndex: 1000
+  zIndex: 1000,
 };
 
-const modal: any = {
+const modal: React.CSSProperties = {
   background: "#1e293b",
   padding: 30,
   borderRadius: 20,
   width: 320,
   color: "white",
-  border: "1px solid rgba(148,163,184,0.3)"
+  border: "1px solid rgba(148,163,184,0.3)",
 };
 
-const statRow: any = {
+const statRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  marginBottom: 10
+  marginBottom: 10,
 };
 
-const button: any = {
+const button: React.CSSProperties = {
   marginTop: 20,
   width: "100%",
   padding: 10,
@@ -81,5 +81,7 @@ const button: any = {
   border: "none",
   background: "#1e40af",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 600,
 };
