@@ -26,11 +26,36 @@ export default function App() {
   // ── analysis (recomputed each render) ──
   const analysis = analyzer.analyze(landmarks, exercise);
 
-  // ── auto-start when user is in view ──
+  // ── auto-start with countdown when user is in view ──
+  const countdownRef = useRef<number | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
   useEffect(() => {
-    if (analysis.inView && engine.state === "idle") {
-      engine.startWorkout();
-      speak("Go!");
+    if (analysis.inView && engine.state === "idle" && !countdownRef.current) {
+      let remaining = 3;
+      setCountdown(remaining);
+      speak("Get ready", 2);
+
+      countdownRef.current = window.setInterval(() => {
+        remaining--;
+        if (remaining > 0) {
+          setCountdown(remaining);
+          speak(String(remaining), 2);
+        } else {
+          clearInterval(countdownRef.current!);
+          countdownRef.current = null;
+          setCountdown(null);
+          engine.startWorkout();
+          speak("Go!", 2);
+        }
+      }, 1000);
+    }
+
+    // cancel countdown if user leaves view
+    if (!analysis.inView && countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
     }
   }, [analysis.inView, engine.state]);
 
@@ -44,7 +69,12 @@ export default function App() {
     if (!analysis.inView) return;
 
     engine.processFrame(analysis.angle, analysis.formScore, analysis.formIssues);
-  }, [landmarks, analysis, engine.processFrame]);
+
+    // speak form issues — priority 1 (highest)
+    if (analysis.formIssues.length > 0 && engine.state === "active") {
+      speak(analysis.formIssues[0], 1);
+    }
+  }, [landmarks, analysis, engine.processFrame, engine.state]);
 
   // ── auto-detect exercise ──
   const prevDetectedRef = useRef<Exercise | null>(null);
@@ -57,33 +87,45 @@ export default function App() {
       prevDetectedRef.current = analysis.detectedExercise;
 
       if (analysis.detectedExercise !== exercise) {
-        speak(`Detected ${analysis.detectedExercise}`);
+        speak(`Detected ${analysis.detectedExercise}`, 2);
         setExercise(analysis.detectedExercise);
       }
     }
   }, [analysis.detectedExercise]);
 
-  // ── voice: form issues ──
-  const prevFeedbackRef = useRef("Ready");
+  // ── voice: engine feedback (e.g. "Go lower" after failed rep) ──
+  const prevEngineFeedbackRef = useRef("Ready");
 
   useEffect(() => {
-    if (engine.feedback !== prevFeedbackRef.current) {
-      prevFeedbackRef.current = engine.feedback;
-      if (engine.feedback !== "Good form") {
-        speak(engine.feedback);
+    if (engine.feedback !== prevEngineFeedbackRef.current) {
+      if (engine.feedback === "Good form") {
+        if (
+          prevEngineFeedbackRef.current !== "Ready" &&
+          prevEngineFeedbackRef.current !== "Good form"
+        ) {
+          speak("Good form", 3);
+        }
+        resetVoiceMemory();
+      } else if (engine.feedback !== "Ready") {
+        speak(engine.feedback, 1);
       }
     }
+    prevEngineFeedbackRef.current = engine.feedback;
   }, [engine.feedback]);
 
-  // ── voice: rep count + pause detection after rep ──
+  // ── voice: rep count + almost done + pause detection ──
   const prevRepsRef = useRef(0);
 
   useEffect(() => {
     if (engine.reps > prevRepsRef.current && engine.reps > 0) {
-      if (engine.feedback === "Good form") {
-        speak(String(engine.reps));
+      const remaining = engine.profile.repsPerSet - engine.reps;
+
+      if (remaining === 2) {
+        speak("Almost done", 3);
+      } else if (engine.feedback === "Good form") {
+        speak(String(engine.reps), 4);
       }
-      // prevent exercise switch right after a rep
+
       analyzer.pauseDetection();
     }
     prevRepsRef.current = engine.reps;
@@ -91,9 +133,25 @@ export default function App() {
 
   // ── voice: state transitions ──
   useEffect(() => {
-    if (engine.state === "resting") speak("Set complete. Rest.");
-    if (engine.state === "completed") speak("Workout complete!");
+    if (engine.state === "resting") speak("Set complete. Rest.", 2);
+    if (engine.state === "completed") speak("Workout complete!", 2);
   }, [engine.state]);
+
+  // ── voice: plank almost done ──
+  const plankAlmostRef = useRef(false);
+
+  useEffect(() => {
+    const remaining = engine.profile.plankSeconds - engine.plankTime;
+
+    if (remaining <= 3 && remaining > 0 && engine.plankTime > 0 && !plankAlmostRef.current) {
+      speak("Almost done", 3);
+      plankAlmostRef.current = true;
+    }
+
+    if (engine.plankTime === 0) {
+      plankAlmostRef.current = false;
+    }
+  }, [engine.plankTime]);
 
   // ── handlers ──
 
@@ -102,12 +160,22 @@ export default function App() {
   }
 
   function handleExerciseChange(ex: Exercise) {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
+    }
     setExercise(ex);
     analyzer.reset();
     resetVoiceMemory();
   }
 
   function handleSummaryClose() {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
+    }
     engine.resetWorkout();
     analyzer.reset();
     resetVoiceMemory();
@@ -194,8 +262,14 @@ export default function App() {
               </div>
             </div>
 
-            <div style={styles.cameraWrap}>
+            <div style={{ ...styles.cameraWrap, position: "relative" }}>
               <CameraView ref={videoRef} />
+              {countdown !== null && (
+                <div style={styles.countdownOverlay}>
+                  <div style={styles.countdownNumber}>{countdown}</div>
+                  <div style={styles.countdownLabel}>Get ready</div>
+                </div>
+              )}
             </div>
 
             <div style={styles.controls}>
@@ -341,6 +415,27 @@ const styles: Record<string, any> = {
   },
   btnOn: { background: "#1e40af" },
   btnOff: { opacity: 0.8 },
+  countdownOverlay: {
+    position: "absolute",
+    inset: 16,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    background: "rgba(0,0,0,0.6)",
+    borderRadius: 16,
+  },
+  countdownNumber: {
+    fontSize: 72,
+    fontWeight: 900,
+    color: "white",
+  },
+  countdownLabel: {
+    fontSize: 18,
+    fontWeight: 600,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 8,
+  },
   footer: {
     padding: 16,
     textAlign: "center",
