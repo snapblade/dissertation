@@ -125,7 +125,7 @@ export default function StatsPanel({
   );
 }
 
-/* ─── STYLES ─── */
+/*  STYLES */
 
 const card: React.CSSProperties = {
   width: 260,

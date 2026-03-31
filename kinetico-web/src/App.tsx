@@ -14,19 +14,19 @@ export default function App() {
   const [running, setRunning] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-  // ── layer 1: vision ──
+  // layer 1: vision
   const videoRef = useRef<HTMLVideoElement>(null);
   const { landmarks } = usePoseEngine(videoRef, running);
 
-  // ── layer 2 + 3: analysis + engine ──
+  // layer 2 + 3: analysis + engine
   const engine = useWorkoutEngine(exercise);
   const analyzer = useExerciseAnalyzer(engine.difficulty);
   const { speak, resetVoiceMemory } = useVoiceCoach(voiceEnabled);
 
-  // ── analysis (recomputed each render) ──
+  // analysis (recomputed each render)
   const analysis = analyzer.analyze(landmarks, exercise);
 
-  // ── auto-start with countdown when user is in view ──
+  // auto-start with countdown when user is in view
   const countdownRef = useRef<number | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
 
@@ -59,7 +59,7 @@ export default function App() {
     }
   }, [analysis.inView, engine.state]);
 
-  // ── feed analysis → engine each frame ──
+  // feed analysis → engine each frame
   const prevLandmarksRef = useRef(landmarks);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function App() {
     }
   }, [landmarks, analysis, engine.processFrame, engine.state]);
 
-  // ── auto-detect exercise ──
+  // auto-detect exercise 
   const prevDetectedRef = useRef<Exercise | null>(null);
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export default function App() {
     }
   }, [analysis.detectedExercise]);
 
-  // ── voice: engine feedback (e.g. "Go lower" after failed rep) ──
+  // voice: engine feedback (e.g. "Go lower" after failed rep)
   const prevEngineFeedbackRef = useRef("Ready");
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function App() {
     prevEngineFeedbackRef.current = engine.feedback;
   }, [engine.feedback]);
 
-  // ── voice: rep count + almost done + pause detection ──
+  // voice: rep count + almost done + pause detection 
   const prevRepsRef = useRef(0);
 
   useEffect(() => {
@@ -131,13 +131,13 @@ export default function App() {
     prevRepsRef.current = engine.reps;
   }, [engine.reps]);
 
-  // ── voice: state transitions ──
+  // voice: state transitions
   useEffect(() => {
     if (engine.state === "resting") speak("Set complete. Rest.", 2);
     if (engine.state === "completed") speak("Workout complete!", 2);
   }, [engine.state]);
 
-  // ── voice: plank almost done ──
+  // voice: plank almost done
   const plankAlmostRef = useRef(false);
 
   useEffect(() => {
@@ -153,7 +153,7 @@ export default function App() {
     }
   }, [engine.plankTime]);
 
-  // ── handlers ──
+  // handlers
 
   function handlePauseResume() {
     setRunning((r) => !r);
@@ -181,7 +181,7 @@ export default function App() {
     resetVoiceMemory();
   }
 
-  // ── derived ──
+  // derived
 
   const title =
     exercise === "squat"
@@ -192,7 +192,7 @@ export default function App() {
 
   return (
     <div style={styles.page}>
-      {/* ─── HEADER ─── */}
+      {/* HEADER */}
       <header style={styles.header}>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <div style={styles.logo}>K</div>
@@ -237,7 +237,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ─── MAIN ─── */}
+      {/* MAIN */}
       <main style={styles.main}>
         <section style={styles.left}>
           <div style={styles.card}>
@@ -306,7 +306,7 @@ export default function App() {
         </aside>
       </main>
 
-      {/* ─── SUMMARY MODAL ─── */}
+      {/* SUMMARY MODAL */}
       {engine.summary && (
         <WorkoutSummaryModal
           summary={engine.summary}
@@ -314,7 +314,7 @@ export default function App() {
         />
       )}
 
-      {/* ─── FOOTER ─── */}
+      {/* FOOTER */}
       <footer style={styles.footer}>
         © {new Date().getFullYear()} Kinetico · Built with MediaPipe Pose
       </footer>
@@ -322,7 +322,7 @@ export default function App() {
   );
 }
 
-/* ─── STYLES ─── */
+/* STYLES */
 
 const styles: Record<string, any> = {
   page: {

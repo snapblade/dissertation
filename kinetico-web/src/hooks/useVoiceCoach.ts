@@ -1,13 +1,12 @@
 import { useRef } from "react";
 
-/* ───────────────────────────────────────
+/* 
    PRIORITY LEVELS (lower number = higher priority)
-   
    1. Form corrections — safety/technique
    2. Workout state    — set complete, workout complete
    3. Motivational     — almost done, good form
    4. Rep count        — 1, 2, 3...
-─────────────────────────────────────── */
+ */
 
 export type VoicePriority = 1 | 2 | 3 | 4;
 

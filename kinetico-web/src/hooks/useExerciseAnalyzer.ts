@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { calculateAngle } from "../pose/math";
 import type { Exercise } from "../types/workout";
 
-/* ───────────────────────────────────────
+/* 
    DIFFICULTY THRESHOLDS
    Each difficulty tightens form checks.
    Values are tuned so "easy" only flags
@@ -19,26 +19,26 @@ import type { Exercise } from "../types/workout";
    27 left ankle       28 right ankle
    29 left heel        30 right heel
    31 left foot index  32 right foot index
-─────────────────────────────────────── */
+ */
 
 export type Difficulty = "easy" | "moderate" | "hard";
 
 type SquatThresholds = {
-  balanceDelta: number;       // max L/R knee angle difference (°)
+  balanceDelta: number;       // max L/R knee angle difference
   valgusRatio: number;        // min knee-width / ankle-width ratio
-  forwardLeanAngle: number;   // min torso-to-vertical angle (°)
+  forwardLeanAngle: number;   // min torso-to-vertical angle 
 };
 
 type PushupThresholds = {
-  bodyLineAngle: number;      // min shoulder-hip-ankle angle (°)
-  hipPikeAngle: number;       // max angle before flagging pike (°)
-  elbowFlareAngle: number;    // max elbow-out angle (°)
+  bodyLineAngle: number;      // min shoulder-hip-ankle angle
+  hipPikeAngle: number;       // max angle before flagging pike
+  elbowFlareAngle: number;    // max elbow-out angle 
   headDropThreshold: number;  // max nose below shoulder-mid (normalised)
 };
 
 type PlankThresholds = {
-  bodyLineAngle: number;      // min shoulder-hip-ankle angle (°)
-  hipPikeAngle: number;       // max angle before flagging pike (°)
+  bodyLineAngle: number;      // min shoulder-hip-ankle angle
+  hipPikeAngle: number;       // max angle before flagging pike
   headDropThreshold: number;  // max nose below shoulder-mid (normalised)
   shoulderWristOffset: number; // max X offset shoulder-to-wrist (normalised)
 };
@@ -109,15 +109,11 @@ const THRESHOLDS: Record<Difficulty, Thresholds> = {
   },
 };
 
-/* ───────────────────────────────────────
-   AUTO-DETECT CONFIG
-─────────────────────────────────────── */
+/* AUTO-DETECT CONFIG */
 
 const DETECT_FRAMES = 40;
 
-/* ───────────────────────────────────────
-   ANALYSIS RESULT
-─────────────────────────────────────── */
+/* ANALYSIS RESULT */
 
 export type AnalysisResult = {
   angle: number;
@@ -127,9 +123,7 @@ export type AnalysisResult = {
   inView: boolean;
 };
 
-/* ───────────────────────────────────────
-   HOOK
-─────────────────────────────────────── */
+/* HOOK */
 
 export function useExerciseAnalyzer(difficulty: Difficulty) {
   const detectBufferRef = useRef<Exercise | null>(null);
@@ -153,7 +147,7 @@ export function useExerciseAnalyzer(difficulty: Difficulty) {
 
     const lm = landmarks;
 
-    // ── auto-detect (paused during cooldown) ──
+    // auto-detect (paused during cooldown)
     if (switchCooldownRef.current > 0) {
       switchCooldownRef.current--;
     } else {
@@ -177,13 +171,13 @@ export function useExerciseAnalyzer(difficulty: Difficulty) {
       }
     }
 
-    // ── angle calculation ──
+    // angle calculation
     const angle = computePrimaryAngle(exercise, lm);
 
-    // ── form checks ──
+    //  form checks
     const formIssues = checkForm(exercise, lm, difficulty);
 
-    // ── score: 10 points per issue, floor at 0 ──
+    //  score: 10 points per issue, floor at 0 
     const formScore = Math.max(0, 100 - formIssues.length * 10);
 
     return {
@@ -209,9 +203,7 @@ export function useExerciseAnalyzer(difficulty: Difficulty) {
   return { analyze, reset, pauseDetection };
 }
 
-/* ───────────────────────────────────────
-   PRIMARY ANGLE
-─────────────────────────────────────── */
+/* PRIMARY ANGLE */
 
 function computePrimaryAngle(ex: Exercise, lm: any[]): number {
   if (ex === "squat") {
@@ -226,13 +218,11 @@ function computePrimaryAngle(ex: Exercise, lm: any[]): number {
     return (left + right) / 2;
   }
 
-  // plank → body line
+  // plank -> body line
   return bodyLineAngle(lm);
 }
 
-/* ───────────────────────────────────────
-   BODY LINE (shoulder → hip → ankle)
-─────────────────────────────────────── */
+/* BODY LINE (shoulder -> hip -> ankle) */
 
 function bodyLineAngle(lm: any[]): number {
   const left = calculateAngle(lm[11], lm[23], lm[27]);
@@ -240,10 +230,8 @@ function bodyLineAngle(lm: any[]): number {
   return (left + right) / 2;
 }
 
-/* ───────────────────────────────────────
-   TORSO ANGLE (lean relative to vertical)
-   0° = perfectly upright, higher = more lean
-─────────────────────────────────────── */
+/* TORSO ANGLE (lean relative to vertical)
+   0° = perfectly upright, higher = more lean */
 
 function torsoLeanAngle(lm: any[]): number {
   const shoulderMidX = (lm[11].x + lm[12].x) / 2;
@@ -259,9 +247,7 @@ function torsoLeanAngle(lm: any[]): number {
   return (radians * 180) / Math.PI;
 }
 
-/* ───────────────────────────────────────
-   POSE DETECTION
-─────────────────────────────────────── */
+/* POSE DETECTION */
 
 function detectPose(lm: any[]): Exercise | null {
   const shoulderMidY = (lm[11].y + lm[12].y) / 2;
@@ -287,13 +273,13 @@ function detectPose(lm: any[]): Exercise | null {
   return null;
 }
 
-/* ═══════════════════════════════════════
+/* 
    FORM CHECKS
    Each exercise has multiple checks.
    Only checks relevant to the current
    position fire (e.g. squat checks only
    run when knees are bent past 150°).
-═══════════════════════════════════════ */
+    */
 
 function checkForm(
   ex: Exercise,
@@ -310,13 +296,12 @@ function checkForm(
   return issues;
 }
 
-/* ─────────────────────────────────────
+/* 
    SQUAT FORM CHECKS
-   ─────────────────────────────────────
    1. Balance       — L/R knee angle symmetry
    2. Knee valgus   — knees caving inward
    3. Forward lean  — torso tilting too far
-───────────────────────────────────── */
+ */
 
 function checkSquatForm(
   lm: any[],
@@ -336,12 +321,12 @@ function checkSquatForm(
   // only check form when user is actually squatting (below 150°)
   if (avgKnee > 150) return;
 
-  // 1. Balance — asymmetric knee bend
+  // 1. Balance - asymmetric knee bend
   if (Math.abs(leftKnee - rightKnee) > t.balanceDelta) {
     issues.push("Balance your weight");
   }
 
-  // 2. Knee valgus — knees caving inward
+  // 2. Knee valgus - knees caving inward
   const kneeWidth = Math.abs(lm[25].x - lm[26].x);
   const ankleWidth = Math.abs(lm[27].x - lm[28].x);
 
@@ -352,21 +337,20 @@ function checkSquatForm(
     }
   }
 
-  // 3. Forward lean — torso tilting too far forward
+  // 3. Forward lean - torso tilting too far forward
   const lean = torsoLeanAngle(lm);
   if (lean > t.forwardLeanAngle) {
     issues.push("Keep chest up");
   }
 }
 
-/* ─────────────────────────────────────
+/* 
    PUSHUP FORM CHECKS
-   ─────────────────────────────────────
-   1. Hip sag       — hips dropping below line
-   2. Hip pike      — hips rising too high
-   3. Elbow flare   — elbows splaying outward
-   4. Head drop     — head hanging below shoulders
-───────────────────────────────────── */
+   1. Hip sag       - hips dropping below line
+   2. Hip pike      - hips rising too high
+   3. Elbow flare   - elbows splaying outward
+   4. Head drop     - head hanging below shoulders
+ */
 
 function checkPushupForm(
   lm: any[],
@@ -395,7 +379,7 @@ function checkPushupForm(
   }
 
   // 3. Elbow flare — elbows pointing outward
-  //    Measure the angle: shoulder → elbow → hip.
+  //    Measure the angle: shoulder -> elbow -> hip.
   //    When elbows tuck in, this angle is tight (~30-50°).
   //    When they flare out, it opens up (>70°).
   const leftFlare = calculateAngle(lm[11], lm[13], lm[23]);
@@ -418,14 +402,13 @@ function checkPushupForm(
   }
 }
 
-/* ─────────────────────────────────────
+/* 
    PLANK FORM CHECKS
-   ─────────────────────────────────────
    1. Hip sag       — hips dropping
    2. Hip pike      — hips too high
    3. Head drop     — head hanging
    4. Shoulder stack — shoulders over wrists
-───────────────────────────────────── */
+ */
 
 function checkPlankForm(
   lm: any[],

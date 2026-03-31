@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { Exercise, Workout } from "../types/workout";
 import type { Difficulty } from "./useExerciseAnalyzer";
 
-/* ───────────────────────────────────────
+/* 
    DIFFICULTY PROFILES
-─────────────────────────────────────── */
+ */
 
 type Profile = {
   repsPerSet: number;
@@ -20,16 +20,16 @@ const PROFILES: Record<Difficulty, Profile> = {
   hard:     { repsPerSet: 8,  totalSets: 3, restSeconds: 3, plankSeconds: 16, repDepth: 110 },
 };
 
-/* ───────────────────────────────────────
+/* 
    ADAPTIVE THRESHOLDS
-─────────────────────────────────────── */
+ */
 
 const PROMOTE_SCORE = 85;
 const DEMOTE_SCORE = 60;
 
-/* ───────────────────────────────────────
+/* 
    STATE TYPES
-─────────────────────────────────────── */
+ */
 
 export type WorkoutState =
   | "idle"
@@ -49,12 +49,12 @@ export type WorkoutSummary = {
 
 const CONFIRM_FRAMES = 3;
 
-/* ───────────────────────────────────────
+/* 
    HOOK
-─────────────────────────────────────── */
+ */
 
 export function useWorkoutEngine(exercise: Exercise) {
-  /* ─── render state (drives UI) ─── */
+  /* render state (drives UI) */
   const [reps, setReps] = useState(0);
   const [sets, setSets] = useState(1);
   const [restTime, setRestTime] = useState(0);
@@ -64,7 +64,7 @@ export function useWorkoutEngine(exercise: Exercise) {
   const [state, setState] = useState<WorkoutState>("idle");
   const [summary, setSummary] = useState<WorkoutSummary | null>(null);
 
-  /* ─── refs mirror state for use inside processFrame ─── */
+  /* refs mirror state for use inside processFrame */
   const repsRef = useRef(0);
   const setsRef = useRef(1);
   const stateRef = useRef<WorkoutState>("idle");
@@ -81,17 +81,17 @@ export function useWorkoutEngine(exercise: Exercise) {
   const formScoresRef = useRef<number[]>([]);
   const allFormScoresRef = useRef<number[]>([]);
 
-  /* ─── keep exercise ref in sync ─── */
+  /* keep exercise ref in sync */
   useEffect(() => {
     exerciseRef.current = exercise;
   }, [exercise]);
 
-  /* ─── reset when exercise changes ─── */
+  /* reset when exercise changes */
   useEffect(() => {
     resetWorkout();
   }, [exercise]);
 
-  /* ─── helpers: update ref + state together ─── */
+  /* helpers: update ref + state together */
 
   function setRepsSync(val: number) {
     repsRef.current = val;
@@ -117,7 +117,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     return PROFILES[difficultyRef.current];
   }
 
-  /* ─── start workout ─── */
+  /* start workout */
 
   function startWorkout() {
     if (stateRef.current !== "idle") return;
@@ -125,7 +125,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     startTimeRef.current = Date.now();
   }
 
-  /* ─── process each frame (called from App) ─── */
+  /* process each frame (called from App) */
 
   const processFrame = useCallback((
     angle: number,
@@ -150,7 +150,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }
   }, []);
 
-  /* ─── rep counting (squat / pushup) ─── */
+  /* rep counting (squat / pushup) */
 
   function processRep(angle: number) {
     // always track the lowest point reached
@@ -196,7 +196,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }
   }
 
-  /* ─── plank hold ─── */
+  /* plank hold */
 
   function processPlank(angle: number) {
     if (angle > 160) {
@@ -217,7 +217,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }
   }
 
-  /* ─── set completion → adapt → rest ─── */
+  /* set completion → adapt → rest */
 
   function completeSet() {
     adaptDifficulty();
@@ -249,7 +249,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }, 1000);
   }
 
-  /* ─── adaptive difficulty ─── */
+  /* adaptive difficulty */
 
   function adaptDifficulty() {
     if (formScoresRef.current.length === 0) return;
@@ -267,7 +267,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }
   }
 
-  /* ─── workout complete ─── */
+  /* workout complete */
 
   function finishWorkout() {
     setStateSync("completed");
@@ -309,7 +309,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     });
   }
 
-  /* ─── reset ─── */
+  /* reset */
 
   function resetWorkout() {
     if (restIntervalRef.current) {
@@ -335,7 +335,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     allFormScoresRef.current = [];
   }
 
-  /* ─── cleanup ─── */
+  /* cleanup */
 
   useEffect(() => {
     return () => {
