@@ -24,7 +24,7 @@ const PROFILES: Record<Difficulty, Profile> = {
    ADAPTIVE THRESHOLDS
  */
 
-const PROMOTE_SCORE = 85;
+const PROMOTE_SCORE = 80;
 const DEMOTE_SCORE = 60;
 
 /* 
@@ -128,27 +128,37 @@ export function useWorkoutEngine(exercise: Exercise) {
   /* process each frame (called from App) */
 
   const processFrame = useCallback((
-    angle: number,
-    formScore: number,
-    formIssues: string[]
-  ) => {
-    if (stateRef.current !== "active") return;
-
+  angle: number,
+  formScore: number,
+  formIssues: string[]
+) => {
+  if (stateRef.current !== "active") return;
+ 
+  // For squats/push-ups: only sample during the down phase.
+  // For planks: sample throughout the active set so that bad form
+  // (sag/pike) is captured even when the timer pauses.
+  const isActiveMovement =
+    exerciseRef.current === "plank"
+      ? true
+      : stageRef.current === "down";
+ 
+  if (isActiveMovement) {
     formScoresRef.current.push(formScore);
     allFormScoresRef.current.push(formScore);
-
-    if (formIssues.length > 0) {
-      setFeedback(formIssues[0]);
-    } else {
-      setFeedback("Good form");
-    }
-
-    if (exerciseRef.current === "plank") {
-      processPlank(angle);
-    } else {
-      processRep(angle);
-    }
-  }, []);
+  }
+ 
+  if (formIssues.length > 0) {
+    setFeedback(formIssues[0]);
+  } else {
+    setFeedback("Good form");
+  }
+ 
+  if (exerciseRef.current === "plank") {
+    processPlank(angle);
+  } else {
+    processRep(angle);
+  }
+}, []);
 
   /* rep counting (squat / pushup) */
 

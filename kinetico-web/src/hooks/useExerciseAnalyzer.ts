@@ -177,8 +177,8 @@ export function useExerciseAnalyzer(difficulty: Difficulty) {
     //  form checks
     const formIssues = checkForm(exercise, lm, difficulty);
 
-    //  score: 10 points per issue, floor at 0 
-    const formScore = Math.max(0, 100 - formIssues.length * 10);
+    //  score: 50 points per issue, floor at 0
+    const formScore = Math.max(0, 100 - formIssues.length * 50);
 
     return {
       angle,
@@ -346,12 +346,9 @@ function checkSquatForm(
 
 /* 
    PUSHUP FORM CHECKS
-   1. Hip sag       - hips dropping below line
-   2. Hip pike      - hips rising too high
-   3. Elbow flare   - elbows splaying outward
-   4. Head drop     - head hanging below shoulders
+   1. Elbow flare   - elbows splaying outward
+   2. Head drop     - head hanging below shoulders
  */
-
 function checkPushupForm(
   lm: any[],
   t: PushupThresholds,
@@ -362,40 +359,25 @@ function checkPushupForm(
   const hipMidY = (lm[23].y + lm[24].y) / 2;
   const torsoVertical = Math.abs(shoulderMidY - hipMidY) > 0.15;
   if (torsoVertical) return;
-
-  const body = bodyLineAngle(lm);
-
-  // 1. Hip sag — body line too low
-  if (body < t.bodyLineAngle) {
-    issues.push("Raise your hips");
-  }
-
-  // 2. Hip pike — hips too high (body bent upward)
-  const ankleMidY = (lm[27].y + lm[28].y) / 2;
-  const expectedHipY = (shoulderMidY + ankleMidY) / 2;
-
-  if (hipMidY < expectedHipY - 0.05 && body > t.hipPikeAngle) {
-    issues.push("Lower your hips");
-  }
-
-  // 3. Elbow flare — elbows pointing outward
+ 
+  // 1. Elbow flare — elbows pointing outward
   //    Measure the angle: shoulder -> elbow -> hip.
   //    When elbows tuck in, this angle is tight (~30-50°).
   //    When they flare out, it opens up (>70°).
   const leftFlare = calculateAngle(lm[11], lm[13], lm[23]);
   const rightFlare = calculateAngle(lm[12], lm[14], lm[24]);
   const avgFlare = (leftFlare + rightFlare) / 2;
-
+ 
   // only check during descent (elbow bent)
   const elbowAngle =
     (calculateAngle(lm[11], lm[13], lm[15]) +
       calculateAngle(lm[12], lm[14], lm[16])) / 2;
-
+ 
   if (elbowAngle < 140 && avgFlare > t.elbowFlareAngle) {
     issues.push("Tuck elbows in");
   }
-
-  // 4. Head drop — nose significantly below shoulder line
+ 
+  // 2. Head drop — nose significantly below shoulder line
   const noseY = lm[0].y;
   if (noseY - shoulderMidY > t.headDropThreshold) {
     issues.push("Keep head neutral");
@@ -410,6 +392,8 @@ function checkPushupForm(
    4. Shoulder stack — shoulders over wrists
  */
 
+// Replace your checkPlankForm function in useExerciseAnalyzer.ts with this:
+
 function checkPlankForm(
   lm: any[],
   t: PlankThresholds,
@@ -420,34 +404,26 @@ function checkPlankForm(
   const hipMidY = (lm[23].y + lm[24].y) / 2;
   const torsoVertical = Math.abs(shoulderMidY - hipMidY) > 0.15;
   if (torsoVertical) return;
-
-  const body = bodyLineAngle(lm);
-
-  // 1. Hip sag — core not engaged
-  if (body < t.bodyLineAngle) {
-    issues.push("Engage core");
-  }
-
-  // 2. Hip pike — hips too high
+ 
   const ankleMidY = (lm[27].y + lm[28].y) / 2;
   const expectedHipY = (shoulderMidY + ankleMidY) / 2;
-
-  if (hipMidY < expectedHipY - 0.05 && body > t.hipPikeAngle) {
+  const body = bodyLineAngle(lm);
+ 
+  // 1. Hip sag — body line angle drops below threshold AND hips below midline.
+  //    Using the body angle is more reliable than hip position alone because
+  //    it captures the actual deviation from a straight line.
+  if (body < t.bodyLineAngle && hipMidY > expectedHipY) {
+    issues.push("Engage core");
+  }
+  // 2. Hip pike — hips raised above the midline.
+  //    In image coords, hips higher on screen = smaller Y value.
+  else if (hipMidY < expectedHipY - 0.02) {
     issues.push("Lower your hips");
   }
-
+ 
   // 3. Head drop — nose well below shoulder line
   const noseY = lm[0].y;
   if (noseY - shoulderMidY > t.headDropThreshold) {
     issues.push("Keep head neutral");
-  }
-
-  // 4. Shoulder stack — shoulders should be directly over wrists
-  //    Compare average shoulder X to average wrist X.
-  const shoulderMidX = (lm[11].x + lm[12].x) / 2;
-  const wristMidX = (lm[15].x + lm[16].x) / 2;
-
-  if (Math.abs(shoulderMidX - wristMidX) > t.shoulderWristOffset) {
-    issues.push("Align shoulders over wrists");
   }
 }
