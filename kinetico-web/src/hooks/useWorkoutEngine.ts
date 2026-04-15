@@ -3,7 +3,7 @@ import type { Exercise, Workout } from "../types/workout";
 import type { Difficulty } from "./useExerciseAnalyzer";
 
 /*
- * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ * AI ASSISTANCE DISCLOSURE 
  *
  * The adaptive difficulty system (adaptDifficulty function and form score
  * sampling logic in processFrame) was developed with AI assistance.

@@ -10,7 +10,7 @@ import { useVoiceCoach } from "./hooks/useVoiceCoach";
 import type { Exercise } from "./types/workout";
 
 /*
- * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ * AI ASSISTANCE DISCLOSURE
  *
  * The page layout, header, and styling in this file were developed with
  * AI assistance.

@@ -3,7 +3,7 @@ import type { WorkoutState } from "../hooks/useWorkoutEngine";
 import type { Exercise } from "../types/workout";
 
 /*
- * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ * AI ASSISTANCE DISCLOSURE 
  *
  * The layout and styling of this component were developed with AI assistance.
  *

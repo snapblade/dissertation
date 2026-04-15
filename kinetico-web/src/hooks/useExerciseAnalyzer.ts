@@ -3,7 +3,7 @@ import { calculateAngle } from "../pose/math";
 import type { Exercise } from "../types/workout";
 
 /*
- * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ * AI ASSISTANCE DISCLOSURE 
  *
  * The form check functions (checkSquatForm, checkPushupForm, checkPlankForm)
  * were developed with AI assistance.

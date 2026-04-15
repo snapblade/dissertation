@@ -1,7 +1,7 @@
 import type { WorkoutSummary } from "../hooks/useWorkoutEngine";
 
 /*
- * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ * AI ASSISTANCE DISCLOSURE 
  *
  * The layout and styling of this component were developed with AI assistance.
  *
