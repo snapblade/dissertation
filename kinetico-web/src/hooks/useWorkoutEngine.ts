@@ -227,7 +227,7 @@ export function useWorkoutEngine(exercise: Exercise) {
     }
   }
 
-  /* set completion → adapt → rest */
+  /* set completion -> adapt -> rest */
 
   function completeSet() {
     adaptDifficulty();

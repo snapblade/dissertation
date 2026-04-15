@@ -59,7 +59,7 @@ export default function App() {
     }
   }, [analysis.inView, engine.state]);
 
-  // feed analysis → engine each frame
+  // feed analysis -> engine each frame
   const prevLandmarksRef = useRef(landmarks);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function App() {
 
     engine.processFrame(analysis.angle, analysis.formScore, analysis.formIssues);
 
-    // speak form issues — priority 1 (highest)
+    // speak form issues - priority 1 (highest)
     if (analysis.formIssues.length > 0 && engine.state === "active") {
       speak(analysis.formIssues[0], 1);
     }
