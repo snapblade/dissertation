@@ -9,23 +9,6 @@ import { useWorkoutEngine } from "./hooks/useWorkoutEngine";
 import { useVoiceCoach } from "./hooks/useVoiceCoach";
 import type { Exercise } from "./types/workout";
 
-/*
- * AI ASSISTANCE DISCLOSURE
- *
- * The page layout, header, and styling in this file were developed with
- * AI assistance.
- *
- * Prompt used:
- * - "Create a two-column layout with camera feed on the left and stats
- *    panel on the right, with a header showing status indicators"
- *
- * Adaptations: The orchestration logic (wiring layers together, voice
- * coaching triggers, countdown, auto-detect handling) was developed
- * iteratively through debugging and testing. The dark colour scheme
- * and responsive layout were adjusted to match usability requirements.
- */
-
-
 export default function App() {
   const [exercise, setExercise] = useState<Exercise>("squat");
   const [running, setRunning] = useState(true);

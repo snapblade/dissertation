@@ -1,20 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Workout } from "../types/workout";
 
-/*
- * AI ASSISTANCE DISCLOSURE 
- *
- * The layout and styling of this component were developed with AI assistance.
- *
- * Prompt used:
- * - "Create a workout history component that reads from localStorage and
- *    displays past workouts"
- *
- * Adaptations: The data structure was adjusted to match the Workout type
- * defined in types/workout.ts.
- */
-
-
 export default function WorkoutHistory() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
 

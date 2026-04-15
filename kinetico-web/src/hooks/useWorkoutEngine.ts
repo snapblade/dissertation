@@ -2,28 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { Exercise, Workout } from "../types/workout";
 import type { Difficulty } from "./useExerciseAnalyzer";
 
-/*
- * AI ASSISTANCE DISCLOSURE 
- *
- * The adaptive difficulty system (adaptDifficulty function and form score
- * sampling logic in processFrame) was developed with AI assistance.
- *
- * Prompts used:
- * - "I noticed that after the first set it always goes from moderate to hard
- *    and no matter how bad I try to do the exercise it does not go back to
- *    easy the next set"
- * - "The form score only samples during active movement"
- *
- * Adaptations: The original implementation sampled form scores on every frame,
- * which inflated averages with idle-period scores of 100. This was diagnosed
- * through console logging and fixed by restricting sampling to the down phase
- * for squats/push-ups and throughout the active state for planks. The promote
- * threshold was changed from 85% to 80% and the deduction per issue from 10
- * to 50 based on testing. The PROFILES values (reps, rest, plank hold, depth)
- * were informed by expert consultation.
- */
-
-
 /* 
    DIFFICULTY PROFILES
  */
