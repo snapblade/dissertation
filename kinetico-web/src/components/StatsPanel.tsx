@@ -2,6 +2,22 @@ import type { Difficulty } from "../hooks/useExerciseAnalyzer";
 import type { WorkoutState } from "../hooks/useWorkoutEngine";
 import type { Exercise } from "../types/workout";
 
+/*
+ * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ *
+ * The layout and styling of this component were developed with AI assistance.
+ *
+ * Prompt used:
+ * - "Create a stats panel component that shows tracking status, rep count,
+ *    angle, form score with a colour-coded bar, difficulty badge, and
+ *    feedback text"
+ *
+ * Adaptations: The colour scheme was adjusted to match the application's
+ * dark theme. The display logic for plank hold time vs rep count vs rest
+ * timer was added manually to handle the three different workout states.
+ */
+
+
 type Props = {
   exercise: Exercise;
   state: WorkoutState;

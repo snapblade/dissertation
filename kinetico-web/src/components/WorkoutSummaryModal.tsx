@@ -1,5 +1,19 @@
 import type { WorkoutSummary } from "../hooks/useWorkoutEngine";
 
+/*
+ * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ *
+ * The layout and styling of this component were developed with AI assistance.
+ *
+ * Prompt used:
+ * - "Create a workout summary modal that shows exercise, difficulty, sets,
+ *    reps, duration, and average form score"
+ *
+ * Adaptations: The stat rows and styling were adjusted to match the
+ * application's existing design language.
+ */
+
+
 type Props = {
   summary: WorkoutSummary;
   onClose: () => void;

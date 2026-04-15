@@ -2,6 +2,25 @@ import { useRef } from "react";
 import { calculateAngle } from "../pose/math";
 import type { Exercise } from "../types/workout";
 
+/*
+ * AI ASSISTANCE DISCLOSURE (AIAS Level 4)
+ *
+ * The form check functions (checkSquatForm, checkPushupForm, checkPlankForm)
+ * were developed with AI assistance.
+ *
+ * Prompts used:
+ * - "I want to implement form checks for squats using joint angles from
+ *    MediaPipe landmarks — balance, knee valgus, and forward lean"
+ * - "I want hip sag and hip pike to be separate — one should trigger when
+ *    hips are too high and one when too low"
+ *
+ * Adaptations: All threshold values were reviewed and adjusted in consultation
+ * with Graeme Matheson and Caitlin Matheson. The plank sag/pike logic was
+ * reworked to use directional hip Y position after testing revealed that
+ * body angle alone could not distinguish between the two errors.
+ */
+
+
 /* 
    DIFFICULTY THRESHOLDS
    Each difficulty tightens form checks.
